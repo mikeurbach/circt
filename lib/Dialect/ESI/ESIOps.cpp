@@ -152,15 +152,17 @@ public:
         dyn_cast<UnwrapValidReady>(wrap.chanOutput().use_begin()->getOwner());
     assert(unwrap && "Must be operating on wrap-unwrap pair");
 
-    auto tmpOp = rewriter.create<mlir::ConstantOp>(
-        wrap.getLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+    // Find upstream uses of the wrap's ready value.
+    for (auto &use : llvm::make_early_inc_range(wrap.ready().getUses())) {
+      // Update these uses in place to use the unwrap's ready value.
+      rewriter.updateRootInPlace(use.getOwner(), [&] {
+        use.set(unwrap.ready());
+      });
+    }
 
-    // Replacing `tmpOp` with nullptr also "works".
-    rewriter.replaceOp(wrap, {tmpOp, unwrap.ready()});
+    // Remove the wrap/unwrap pair.
     rewriter.replaceOp(unwrap, operands);
-
-    // If I comment this in, valgrind emits a warning!
-    // rewriter.eraseOp(tmpOp);
+    rewriter.eraseOp(wrap);
   }
 };
 } // anonymous namespace
